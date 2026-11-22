@@ -1,0 +1,13 @@
+name: Runner diagnostic
+
+on:
+  push:
+    branches:
+      - main
+
+jobs:
+  hello:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Confirm runner
+        run: echo "GitHub Actions runner is available"
