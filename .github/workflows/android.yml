@@ -8,40 +8,64 @@ on:
 jobs:
   android:
     runs-on: ubuntu-latest
-    container:
-      image: barichello/godot-ci:4.3
+    timeout-minutes: 35
     steps:
       - uses: actions/checkout@v4
-      - name: Prepare Android SDK, templates and signing key
+
+      - name: Set up Java
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - name: Set up Android SDK
+        uses: android-actions/setup-android@v3
+
+      - name: Install Android SDK packages
+        run: |
+          yes | sdkmanager --licenses
+          sdkmanager "platform-tools" "platforms;android-34" "build-tools;34.0.0"
+
+      - name: Install Godot 4.3 and Android export templates
         run: |
           set -eux
-          chmod -R a+rwX .
-          mkdir -p "$HOME/.android" "$HOME/.local/share/godot/export_templates/4.3.stable" "$HOME/.config/godot" build
-          keytool -genkeypair -v -keystore "$HOME/.android/debug.keystore" -storepass android -alias androiddebugkey -keypass android -keyalg RSA -keysize 2048 -validity 10000 -dname "CN=Android Debug,O=Android,C=US" || true
+          mkdir -p "$HOME/godot" "$HOME/.local/share/godot/export_templates/4.3.stable" "$HOME/.config/godot" "$HOME/.android" build
+          wget -q https://github.com/godotengine/godot/releases/download/4.3-stable/Godot_v4.3-stable_linux.x86_64.zip -O /tmp/godot.zip
+          unzip -o /tmp/godot.zip -d "$HOME/godot"
+          GODOT_BIN="$(find "$HOME/godot" -maxdepth 1 -type f -name 'Godot*' | head -n 1)"
+          test -n "$GODOT_BIN"
+          chmod +x "$GODOT_BIN"
+          echo "GODOT_BIN=$GODOT_BIN" >> "$GITHUB_ENV"
           wget -q https://github.com/godotengine/godot/releases/download/4.3-stable/Godot_v4.3-stable_export_templates.tpz -O /tmp/godot-templates.tpz
           unzip -o /tmp/godot-templates.tpz -d /tmp/godot-templates
           cp -a /tmp/godot-templates/templates/. "$HOME/.local/share/godot/export_templates/4.3.stable/"
-          JAVA_BIN="$(readlink -f "$(command -v javac)")"
-          JAVA_HOME_DIR="$(dirname "$(dirname "$JAVA_BIN")")"
+          keytool -genkeypair -v -keystore "$HOME/.android/debug.keystore" -storepass android -alias androiddebugkey -keypass android -keyalg RSA -keysize 2048 -validity 10000 -dname "CN=Android Debug,O=Android,C=US"
           cat > "$HOME/.config/godot/editor_settings-4.3.tres" <<EOF
           [gd_resource type="EditorSettings" format=3]
           [resource]
-          export/android/android_sdk_path = "/usr/lib/android-sdk"
-          export/android/java_sdk_path = "$JAVA_HOME_DIR"
+          export/android/android_sdk_path = "$ANDROID_HOME"
+          export/android/java_sdk_path = "$JAVA_HOME"
           export/android/debug_keystore = "$HOME/.android/debug.keystore"
           export/android/debug_keystore_user = "androiddebugkey"
           export/android/debug_keystore_pass = "android"
           EOF
-          chmod -R a+rwX "$HOME/.local/share/godot" "$HOME/.config/godot" "$HOME/.android" .
+
       - name: Import project
-        run: godot --headless --editor --path . --quit
+        run: "$GODOT_BIN" --headless --editor --path . --quit
+
       - name: Export APK
-        run: godot --headless --path . --export-debug "Android" build/LastIsland3D.apk
+        run: "$GODOT_BIN" --headless --path . --export-debug "Android" build/LastIsland3D.apk
+
       - name: Verify APK
-        run: test -s build/LastIsland3D.apk
+        run: |
+          test -s build/LastIsland3D.apk
+          file build/LastIsland3D.apk
+          unzip -t build/LastIsland3D.apk
+
       - name: Upload APK
         uses: actions/upload-artifact@v4
         with:
           name: LastIsland3D-debug-apk
           path: build/LastIsland3D.apk
           if-no-files-found: error
+          retention-days: 14
