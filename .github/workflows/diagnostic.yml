@@ -12,8 +12,12 @@ jobs:
       - uses: android-actions/setup-android@v3
         with:
           packages: platform-tools
-      - name: Fix workspace permissions
-        run: chmod -R u+rwX .
+      - name: Prepare writable workspace and clean Godot config
+        run: |
+          chmod -R a+rwX .
+          mkdir -p "$RUNNER_TEMP/godot-config" "$RUNNER_TEMP/godot-home"
+          echo "XDG_CONFIG_HOME=$RUNNER_TEMP/godot-config" >> "$GITHUB_ENV"
+          echo "HOME=$RUNNER_TEMP/godot-home" >> "$GITHUB_ENV"
       - name: Install Android SDK
         run: |
           yes | sdkmanager --licenses
@@ -36,9 +40,14 @@ jobs:
           echo "GODOT_ANDROID_KEYSTORE_DEBUG_USER=androiddebugkey" >> "$GITHUB_ENV"
           echo "GODOT_ANDROID_KEYSTORE_DEBUG_PASSWORD=android" >> "$GITHUB_ENV"
       - name: Import project
-        run: '"$GODOT_BIN" --headless --editor --path . --quit'
+        run: |
+          "$GODOT_BIN" --headless --editor --path . --quit
+          chmod -R a+rwX .
+          mkdir -p .godot/editor
+          chmod -R a+rwX .godot
       - name: Export APK
-        run: '"$GODOT_BIN" --headless --editor --path . --export-debug "Android" build/LastIsland3D.apk'
+        run: |
+          "$GODOT_BIN" --headless --editor --path . --export-debug "Android" build/LastIsland3D.apk
       - name: Verify APK
         run: |
           test -s build/LastIsland3D.apk
