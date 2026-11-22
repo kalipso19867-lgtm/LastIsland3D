@@ -39,15 +39,11 @@ jobs:
           echo "GODOT_ANDROID_KEYSTORE_DEBUG_PATH=$HOME/.android/debug.keystore" >> "$GITHUB_ENV"
           echo "GODOT_ANDROID_KEYSTORE_DEBUG_USER=androiddebugkey" >> "$GITHUB_ENV"
           echo "GODOT_ANDROID_KEYSTORE_DEBUG_PASSWORD=android" >> "$GITHUB_ENV"
-      - name: Import project
-        run: |
-          "$GODOT_BIN" --headless --editor --path . --quit
-          chmod -R a+rwX .
-          mkdir -p .godot/editor
-          chmod -R a+rwX .godot
       - name: Export APK
         run: |
-          "$GODOT_BIN" --headless --editor --path . --export-debug "Android" build/LastIsland3D.apk
+          rm -rf "$XDG_CONFIG_HOME/godot"
+          mkdir -p "$XDG_CONFIG_HOME"
+          "$GODOT_BIN" --headless --path . --export-debug "Android" build/LastIsland3D.apk
       - name: Verify APK
         run: |
           test -s build/LastIsland3D.apk
