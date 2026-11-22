@@ -1,45 +1,54 @@
-name: Build Android APK
+name: Android APK build
 
 on:
   push:
-    branches: [main]
+    branches:
+      - main
   workflow_dispatch:
 
-jobs:
-  android:
-    runs-on: ubuntu-latest
-    timeout-minutes: 35
-    steps:
-      - uses: actions/checkout@v4
+permissions:
+  contents: read
 
-      - name: Set up Java
+jobs:
+  build:
+    name: Build LastIsland3D APK
+    runs-on: ubuntu-22.04
+    timeout-minutes: 40
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install Java 17
         uses: actions/setup-java@v4
         with:
           distribution: temurin
           java-version: '17'
 
-      - name: Set up Android SDK
+      - name: Install Android command line tools
         uses: android-actions/setup-android@v3
 
-      - name: Install Android SDK packages
+      - name: Install Android SDK components
         run: |
           yes | sdkmanager --licenses
           sdkmanager "platform-tools" "platforms;android-34" "build-tools;34.0.0"
 
-      - name: Install Godot 4.3 and Android export templates
+      - name: Download Godot 4.3
         run: |
-          set -eux
           mkdir -p "$HOME/godot" "$HOME/.local/share/godot/export_templates/4.3.stable" "$HOME/.config/godot" "$HOME/.android" build
-          wget -q https://github.com/godotengine/godot/releases/download/4.3-stable/Godot_v4.3-stable_linux.x86_64.zip -O /tmp/godot.zip
-          unzip -o /tmp/godot.zip -d "$HOME/godot"
-          GODOT_BIN="$(find "$HOME/godot" -maxdepth 1 -type f -name 'Godot*' | head -n 1)"
-          test -n "$GODOT_BIN"
-          chmod +x "$GODOT_BIN"
-          echo "GODOT_BIN=$GODOT_BIN" >> "$GITHUB_ENV"
-          wget -q https://github.com/godotengine/godot/releases/download/4.3-stable/Godot_v4.3-stable_export_templates.tpz -O /tmp/godot-templates.tpz
-          unzip -o /tmp/godot-templates.tpz -d /tmp/godot-templates
-          cp -a /tmp/godot-templates/templates/. "$HOME/.local/share/godot/export_templates/4.3.stable/"
-          keytool -genkeypair -v -keystore "$HOME/.android/debug.keystore" -storepass android -alias androiddebugkey -keypass android -keyalg RSA -keysize 2048 -validity 10000 -dname "CN=Android Debug,O=Android,C=US"
+          curl -fL https://github.com/godotengine/godot/releases/download/4.3-stable/Godot_v4.3-stable_linux.x86_64.zip -o /tmp/godot.zip
+          unzip -q /tmp/godot.zip -d "$HOME/godot"
+          echo "GODOT_BIN=$HOME/godot/Godot_v4.3-stable_linux.x86_64" >> "$GITHUB_ENV"
+          chmod +x "$HOME/godot/Godot_v4.3-stable_linux.x86_64"
+          curl -fL https://github.com/godotengine/godot/releases/download/4.3-stable/Godot_v4.3-stable_export_templates.tpz -o /tmp/templates.tpz
+          unzip -q /tmp/templates.tpz -d /tmp/templates
+          cp -a /tmp/templates/templates/. "$HOME/.local/share/godot/export_templates/4.3.stable/"
+
+      - name: Create Android debug signing key
+        run: |
+          keytool -genkeypair -noprompt -keystore "$HOME/.android/debug.keystore" -storepass android -alias androiddebugkey -keypass android -keyalg RSA -keysize 2048 -validity 10000 -dname "CN=Android Debug,O=Android,C=US"
+
+      - name: Configure Godot Android paths
+        run: |
           cat > "$HOME/.config/godot/editor_settings-4.3.tres" <<EOF
           [gd_resource type="EditorSettings" format=3]
           [resource]
@@ -53,19 +62,19 @@ jobs:
       - name: Import project
         run: "$GODOT_BIN" --headless --editor --path . --quit
 
-      - name: Export APK
+      - name: Export Android APK
         run: "$GODOT_BIN" --headless --path . --export-debug "Android" build/LastIsland3D.apk
 
-      - name: Verify APK
+      - name: Validate APK
         run: |
           test -s build/LastIsland3D.apk
-          file build/LastIsland3D.apk
           unzip -t build/LastIsland3D.apk
+          file build/LastIsland3D.apk
 
-      - name: Upload APK
+      - name: Upload APK artifact
         uses: actions/upload-artifact@v4
         with:
-          name: LastIsland3D-debug-apk
+          name: LastIsland3D-Android-APK
           path: build/LastIsland3D.apk
           if-no-files-found: error
           retention-days: 14
