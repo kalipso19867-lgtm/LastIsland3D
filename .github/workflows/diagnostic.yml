@@ -12,6 +12,8 @@ jobs:
       - uses: android-actions/setup-android@v3
         with:
           packages: platform-tools
+      - name: Fix workspace permissions
+        run: chmod -R u+rwX .
       - name: Install Android SDK
         run: |
           yes | sdkmanager --licenses
@@ -34,7 +36,7 @@ jobs:
       - name: Import project
         run: '"$GODOT_BIN" --headless --editor --path . --quit'
       - name: Export APK
-        run: '"$GODOT_BIN" --headless --path . --export-debug "Android" build/LastIsland3D.apk'
+        run: '"$GODOT_BIN" --headless --editor --path . --export-debug "Android" build/LastIsland3D.apk'
       - name: Verify APK
         run: |
           test -s build/LastIsland3D.apk
