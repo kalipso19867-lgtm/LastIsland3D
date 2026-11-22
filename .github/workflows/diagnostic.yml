@@ -1,13 +1,77 @@
-name: Runner diagnostic
+name: LastIsland3D Android APK
 
 on:
   push:
     branches:
       - main
+  workflow_dispatch:
+
+permissions:
+  contents: read
 
 jobs:
-  hello:
+  build:
+    name: Build Android APK
     runs-on: ubuntu-latest
+    timeout-minutes: 40
     steps:
-      - name: Confirm runner
-        run: echo "GitHub Actions runner is available"
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - uses: android-actions/setup-android@v3
+
+      - name: Install Android SDK
+        run: |
+          yes | sdkmanager --licenses
+          sdkmanager "platform-tools" "platforms;android-34" "build-tools;34.0.0"
+
+      - name: Install Godot and export templates
+        run: |
+          set -eux
+          mkdir -p "$HOME/godot" "$HOME/.local/share/godot/export_templates/4.3.stable" "$HOME/.config/godot" "$HOME/.android" build
+          curl -fL https://github.com/godotengine/godot/releases/download/4.3-stable/Godot_v4.3-stable_linux.x86_64.zip -o /tmp/godot.zip
+          unzip -q /tmp/godot.zip -d "$HOME/godot"
+          chmod +x "$HOME/godot/Godot_v4.3-stable_linux.x86_64"
+          echo "GODOT_BIN=$HOME/godot/Godot_v4.3-stable_linux.x86_64" >> "$GITHUB_ENV"
+          curl -fL https://github.com/godotengine/godot/releases/download/4.3-stable/Godot_v4.3-stable_export_templates.tpz -o /tmp/templates.tpz
+          unzip -q /tmp/templates.tpz -d /tmp/templates
+          cp -a /tmp/templates/templates/. "$HOME/.local/share/godot/export_templates/4.3.stable/"
+
+      - name: Create debug signing key
+        run: |
+          keytool -genkeypair -noprompt -keystore "$HOME/.android/debug.keystore" -storepass android -alias androiddebugkey -keypass android -keyalg RSA -keysize 2048 -validity 10000 -dname "CN=Android Debug,O=Android,C=US"
+
+      - name: Configure Godot
+        run: |
+          cat > "$HOME/.config/godot/editor_settings-4.3.tres" <<EOF
+          [gd_resource type="EditorSettings" format=3]
+          [resource]
+          export/android/android_sdk_path = "$ANDROID_HOME"
+          export/android/java_sdk_path = "$JAVA_HOME"
+          export/android/debug_keystore = "$HOME/.android/debug.keystore"
+          export/android/debug_keystore_user = "androiddebugkey"
+          export/android/debug_keystore_pass = "android"
+          EOF
+
+      - name: Import project
+        run: "$GODOT_BIN" --headless --editor --path . --quit
+
+      - name: Export APK
+        run: "$GODOT_BIN" --headless --path . --export-debug "Android" build/LastIsland3D.apk
+
+      - name: Verify APK
+        run: |
+          test -s build/LastIsland3D.apk
+          unzip -t build/LastIsland3D.apk
+          file build/LastIsland3D.apk
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: LastIsland3D-Android-APK
+          path: build/LastIsland3D.apk
+          if-no-files-found: error
+          retention-days: 14
